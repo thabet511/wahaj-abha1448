@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة تحكم الإدارة - بطولة وهج</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet" />
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; }
+        body { background-color: #E0F2FE; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #0F172A; display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { background-color: #ffffff; padding: 40px; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
+        .login-box h2 { margin-bottom: 20px; color: #0F172A; }
+        .input-group { margin-bottom: 15px; text-align: right; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .input-group input { width: 100%; padding: 10px; border: 2px solid #bae6fd; font-size: 16px; outline: none; }
+        .btn-sharp { background-color: #0F172A; color: #ffffff; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; transition: background-color 0.3s; border-radius: 0px; }
+        .btn-sharp:hover { background-color: #0284c7; }
+        #login-error { color: #dc2626; margin-top: 10px; font-weight: bold; display: none; }
+        #admin-panel { display: none; width: 100%; max-width: 1200px; padding: 20px; }
+        header { background-color: #0F172A; color: #ffffff; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; }
+        header h1 { font-size: 24px; }
+        .logout-btn { background-color: #dc2626; color: white; border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; }
+        .section-card { background-color: #ffffff; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .section-card h2 { border-bottom: 3px solid #0F172A; padding-bottom: 10px; margin-bottom: 20px; font-size: 20px; }
+        .grid-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .form-container { background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; }
+        .form-container h3 { margin-bottom: 10px; font-size: 16px; color: #1e3a8a; }
+        select, input[type="text"], input[type="number"] { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #cbd5e1; font-size: 15px; outline: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-size: 14px; }
+        th { background-color: #0F172A; color: white; }
+        .action-btn { background-color: #0F172A; color: white; border: none; padding: 5px 10px; cursor: pointer; font-size: 12px; transition: background-color 0.2s; border-radius: 0px; }
+        .action-btn:hover { background-color: #0284c7; }
+        .delete-btn { background-color: #dc2626; }
+        .delete-btn:hover { background-color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>تسجيل دخول الإدارة</h2>
+            <div class="input-group">
+                <label>اسم المستخدم</label>
+                <input type="text" id="username" placeholder="أدخل اسم المستخدم" />
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="password" placeholder="أدخل كلمة المرور" />
+            </div>
+            <button class="btn-sharp" onclick="attemptLogin()">دخول</button>
+            <div id="login-error">البيانات غير صحيحة! جرب مجدداً.</div>
+        </div>
+    </div>
+    <header id="main-header" style="display: none;">
+        <h1>لوحة تحكم بطولة وهج 🏆</h1>
+        <button class="logout-btn" onclick="logout()">خروج</button>
+    </header>
+    <div id="admin-panel">
+        
+        <!-- 1. إدارة نتائج الطلاب (الفردي) -->
+        <div class="section-card">
+            <h2>1. إدارة تصنيف الطلاب (الفردي)</h2>
+            <div class="grid-forms">
+                <div class="form-container">
+                    <h3>إضافة طالب جديد</h3>
+                    <input type="text" id="student-name" placeholder="اسم الطالب الثلاثي" />
+                    <input type="number" id="student-points" placeholder="النقاط الابتدائية" min="0" />
+                    <button class="btn-sharp" onclick="addStudent()">حفظ الطالب</button>
+                </div>
+                <div class="form-container" style="grid-column: span 2;">
+                    <h3>قائمة الطلاب الحاليين وتعديل نقاطهم</h3>
+                    <div style="overflow-x: auto;">
+                        <table id="students-table">
+                            <thead>
+                                <tr>
+                                    <th>الاسم</th><th>النقاط الحالية</th><th>تحديث النقاط</th><th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. إدارة ترتيب الفرق والمجموعات -->
+        <div class="section-card">
+            <h2>2. إدارة ترتيب الفرق (المجموعات الحرة)</h2>
+            <div class="grid-forms">
+                <!-- كرة القدم بمجموعات حرة -->
+                <div class="form-container">
+                    <h3>تعديل فريق (كرة قدم ⚽)</h3>
+                    <input type="text" id="fb-group-input" placeholder="اسم المجموعة (مثال: المجموعة أ)" />
+                    <input type="text" id="fb-team-input" placeholder="اسم الفريق (مثال: الفرسان)" />
+                    <input type="number" id="fb-played" placeholder="لعب" min="0" />
+                    <input type="number" id="fb-points" placeholder="النقاط" min="0" />
+                    <input type="number" id="fb-draws" placeholder="التعادل" min="0" />
+                    <input type="number" id="fb-gf" placeholder="أهداف له" min="0" />
+                    <input type="number" id="fb-ga" placeholder="أهداف عليه" min="0" />
+                    <input type="number" id="fb-yellow" placeholder="الكروت الصفراء" min="0" />
+                    <input type="number" id="fb-red" placeholder="الكروت الحمراء" min="0" />
+                    <button class="btn-sharp" onclick="updateFootballStats()">تحديث فريق القدم</button>
+                </div>
+
+                <!-- كرة الطائرة بمجموعات حرة -->
+                <div class="form-container">
+                    <h3>تعديل فريق (كرة طائرة 🏐)</h3>
+                    <input type="text" id="vl-group-input" placeholder="اسم المجموعة (مثال: المجموعة أ)" />
+                    <input type="text" id="vl-team-input" placeholder="اسم الفريق (مثال: الفرسان)" />
+                    <input type="number" id="vl-played" placeholder="لعب" min="0" />
+                    <input type="number" id="vl-points" placeholder="النقاط" min="0" />
+                    <input type="number" id="vl-gf" placeholder="أهداف له" min="0" />
+                    <input type="number" id="vl-ga" placeholder="أهداف عليه" min="0" />
+                    <button class="btn-sharp" onclick="updateVolleyStats()">تحديث فريق الطائرة</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. إضافة جدول مباريات البطولة -->
+        <div class="section-card">
+            <h2>3. إضافة مباراة لجدول البطولة</h2>
+            <div class="grid-forms">
+                <div class="form-container">
+                    <h3>تفاصيل المباراة</h3>
+                    <input type="text" id="match-day" placeholder="اليوم والتاريخ (مثال: الأحد 17 يوليو)" />
+                    <select id="match-sport">
+                        <option value="قدم">كرة قدم ⚽</option>
+                        <option value="طائرة">كرة طائرة 🏐</option>
+                    </select>
+                    <input type="text" id="match-team1" placeholder="اسم الفريق الأول" />
+                    <input type="text" id="match-team2" placeholder="اسم الفريق الثاني" />
+                    <button class="btn-sharp" onclick="addMatch()">إضافة المباراة للجدول</button>
+                </div>
+                <div class="form-container" style="grid-column: span 2;">
+                    <h3>المباريات المضافة حالياً</h3>
+                    <table id="matches-table">
+                        <thead>
+                            <tr>
+                                <th>اليوم</th><th>اللعبة</th><th>المباراة</th><th>إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            projectId: "wahaj-48abha",
+            storageBucket: "wahaj-48abha.appspot.com",
+            messagingSenderId: "796567778899",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        function attemptLogin() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            if (user === "admin" && pass === "wahaj1448$") {
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('main-header').style.display = 'flex';
+                document.getElementById('admin-panel').style.display = 'block';
+                loadAdminData();
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+        function logout() { window.location.reload(); }
+        function loadAdminData() {
+            db.collection("students").orderBy("points", "desc").onSnapshot(snapshot => {
+                const tbody = document.querySelector("#students-table tbody");
+                tbody.innerHTML = "";
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = '<td>' + data.name + '</td><td style="font-weight:bold;">' + data.points + '</td><td><input type="number" id="update-pts-' + doc.id + '" style="width:80px; margin:0;" placeholder="نقاط جديدة"><button class="action-btn" onclick="updateStudentPoints(\'' + doc.id + '\')">تحديث</button></td><td><button class="action-btn delete-btn" onclick="deleteStudent(\'' + doc.id + '\')">حذف</button></td>';
+                    tbody.appendChild(tr);
+                });
+            });
+            db.collection("matches").onSnapshot(snapshot => {
+                const tbody = document.querySelector("#matches-table tbody");
+                tbody.innerHTML = "";
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = '<td>' + data.day + '</td><td>' + (data.sport === "قدم" ? "⚽ قدم" : "🏐 طائرة") + '</td><td style="font-weight:bold;">' + data.team1 + ' ضد ' + data.team2 + '</td><td><button class="action-btn delete-btn" onclick="deleteMatch(\'' + doc.id + '\')">حذف</button></td>';
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+        function addStudent() {
+            const name = document.getElementById("student-name").value;
+            const points = parseInt(document.getElementById("student-points").value) || 0;
+            if (name.trim() === "") return alert("يرجى كتابة اسم الطالب!");
+            db.collection("students").add({ name: name, points: points }).then(() => {
+                document.getElementById("student-name").value = "";
+                document.getElementById("student-points").value = "";
+            });
+        }
+        function updateStudentPoints(id) {
+            const newPoints = parseInt(document.getElementById('update-pts-' + id).value);
+            if (isNaN(newPoints)) return alert("يرجى إدخال قيمة رقمية صحيحة!");
+            db.collection("students").doc(id).update({ points: newPoints });
+        }
+        function deleteStudent(id) { if (confirm("هل أنت متأكد من حذف هذا الطالب؟")) { db.collection("students").doc(id).delete(); } }
+        
+        function updateFootballStats() {
+            const group = document.getElementById("fb-group-input").value.trim() || "المجموعة الأولى";
+            const team = document.getElementById("fb-team-input").value.trim();
+            const played = parseInt(document.getElementById("fb-played").value) || 0;
+            const points = parseInt(document.getElementById("fb-points").value) || 0;
+            const draws = parseInt(document.getElementById("fb-draws").value) || 0;
+            const gf = parseInt(document.getElementById("fb-gf").value) || 0;
+            const ga = parseInt(document.getElementById("fb-ga").value) || 0;
+            const yellow = parseInt(document.getElementById("fb-yellow").value) || 0;
+            const red = parseInt(document.getElementById("fb-red").value) || 0;
+            if (!team) return alert("يرجى إدخال اسم الفريق أولاً!");
+            
+            db.collection("football_standings").doc(team).set({ group, team, played, points, draws, gf, ga, yellow, red }).then(() => { 
+                alert('تم تحديث إحصائيات فريق القدم (' + team + ') في (' + group + ') بنجاح!'); 
+            });
+        }
+        function updateVolleyStats() {
+            const group = document.getElementById("vl-group-input").value.trim() || "المجموعة الأولى";
+            const team = document.getElementById("vl-team-input").value.trim();
+            const played = parseInt(document.getElementById("vl-played").value) || 0;
+            const points = parseInt(document.getElementById("vl-points").value) || 0;
+            const gf = parseInt(document.getElementById("vl-gf").value) || 0;
+            const ga = parseInt(document.getElementById("vl-ga").value) || 0;
+            if (!team) return alert("يرجى إدخال اسم الفريق أولاً!");
+            
+            db.collection("volley_standings").doc(team).set({ group, team, played, points, gf, ga }).then(() => { 
+                alert('تم تحديث إحصائيات فريق الطائرة (' + team + ') في (' + group + ') بنجاح!'); 
+            });
+        }
+        function addMatch() {
+            const day = document.getElementById("match-day").value;
+            const sport = document.getElementById("match-sport").value;
+            const team1 = document.getElementById("match-team1").value.trim();
+            const team2 = document.getElementById("match-team2").value.trim();
+            if (day.trim() === "") return alert("يرجى إدخال اليوم والتاريخ!");
+            if (!team1 || !team2) return alert("يرجى كتابة أسماء الفرق للمباراة!");
+            if (team1 === team2) return alert("لا يمكن للفريق أن يلعب ضد نفسه!");
+            db.collection("matches").add({ day, sport, team1, team2 }).then(() => { document.getElementById("match-day").value = ""; alert("تمت إضافة المباراة لجدول البطولة المباشر!"); });
+        }
+        function deleteMatch(id) { if (confirm("هل تود حذف هذه المباراة من جدول البطولة؟")) { db.collection("matches").doc(id).delete(); } }
+    </script>
+</body>
+</html>
